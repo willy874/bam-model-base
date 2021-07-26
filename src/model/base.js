@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import Validate from '../utility/validate.js'
 import uuid from '../utility/uuid-v4.js'
 import apiRequest from '../utility/api-request.js'
@@ -11,7 +12,7 @@ import apiRequest from '../utility/api-request.js'
  * @property {Validate} $validate    - 目前產生的錯誤訊息
  * @property {HTMLElement} $ref      - 生成後被綁定的實體
  * @property {Boolean} $loading      - 目前是否為讀取中
- * @property {UUID} $modelId         -
+ * @property {UUID} $uuid         -
  * @property {String} $mode          - ["static", "created", "edited", "deleted", "active"]
  * @property {String} $api           - 該 model api 的 Url
  * @property {String} $baseUrl       -
@@ -32,7 +33,7 @@ export default class BaseModel {
     ;[
       { key: '$validate', value: new Validate({ model: this, options: {} }) },
       { key: '$ref', value: null },
-      { key: '$modelId', value: uuid() },
+      { key: '$uuid', value: uuid() },
       { key: '$arrayModel', value: {} },
       { key: '$mode', value: entity.$mode || 'static' },
       { key: '$loading', value: entity.$loading || false },
@@ -47,9 +48,24 @@ export default class BaseModel {
         writable: true,
       })
     })
-    this.created_at = entity.created_at || undefined
-    this.updated_at = entity.updated_at || undefined
-    this.deleted_at = entity.deleted_at || undefined
+    ;['created_at', 'updated_at', 'deleted_at'].forEach(key => {
+      let dateValue = dayjs(entity[key] || '').isValid() ? dayjs(entity[key]).format(this.$dayFormat) : null
+      Object.defineProperty(this, key, {
+        enumerable: true,
+        get () {
+          return dateValue
+        },
+        set (value) {
+          dateValue = dayjs(value || '').isValid() ? dayjs(value).format(this.$dayFormat) : null
+        }
+      })
+    })
+    
+    Object.defineProperty(this, '$on', {
+      value: entity.$on || {},
+      enumerable: false,
+      writable: true,
+    })
   }
 
   setterMiddleware (entity) {

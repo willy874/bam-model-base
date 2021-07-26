@@ -1,4 +1,25 @@
 import BaseModel from './base.js'
+import uuid from '../utility/uuid-v4.js'
+import apiRequest from '../utility/api-request.js'
+
+/**
+ * @interface RequestOptions
+ * @property {Function} options.requesHandler
+ * @property {Function} options.requestSuccess 該請求成功時的 callback
+ * @property {Function} options.requestError 該請求失敗時的 callback
+ * @property {Function} options.responseSuccess 該回應成功時的 callback
+ * @property {Function} options.responseError 該回應失敗時的 callback
+ * @property {Headers} options.headers 該請求的 http headers
+ * @property {String} options.method 該請求的 http method
+ * @property {Object} options.params 該請求的 http url params
+ * @property {Object} options.query 該請求的 http query string
+ * @property {String} options.mode Contains the mode of the request.
+ * @property {String} options.cache Contains the cache mode of the request.
+ * @property {String} options.redirect Contains the mode for how redirects are handled. It may be one of follow, error, or manual.
+ * @property {String} options.referrer Contains the referrer of the request.
+ * @property {String} options.integrity Contains the subresource integrity value of the request.
+ * @property {String} options.credentials Contains the credentials of the request. The default is same-origin.
+ */
 
 /**
  * @interface ListModel
@@ -90,6 +111,21 @@ class ListModel {
     this.$query = entity.$query || {}
     this.$primaryKey = entity.$primaryKey || 'id'
     this.$api = entity.$api || 'api'
+    ;[
+      { key: '$ref', value: null },
+      { key: '$uuid', value: uuid() },
+      { key: '$mode', value: entity.$mode || 'static' },
+      { key: '$loading', value: entity.$loading || false },
+      { key: '$baseUrl', value: entity.$baseUrl || location.hostname.origin },
+      { key: '$api', value: entity.$api || '' },
+      { key: '$query', value: entity.$query || {} },
+    ].forEach(obj => {
+      Object.defineProperty(this, obj.key, {
+        value: obj.value,
+        enumerable: false,
+        writable: true,
+      })
+    })
 
     // 後端屬性
     this.$currentPage = entity.$currentPage || 0
@@ -97,10 +133,6 @@ class ListModel {
     this.$perPage = entity.$perPage || 0
     this.$total = entity.$total || 0
 
-    /**
-     * Event
-     * submit,reset,invalid
-     */
     Object.defineProperty(this, '$on', {
       value: entity.$on || {},
       enumerable: false,
@@ -165,26 +197,6 @@ class ListModel {
     return this
   }
 
-  /**
-   * @param {*} data 
-   * @param {Request} req 
-   * @param {*} options 
-   * @returns {this}
-   */
-  requesHandler(data, req, options) {
-    return data
-  }
-
-  /**
-   * @param {*} data 
-   * @param {Response} res 
-   * @param {*} options 
-   * @returns {this}
-   */
-  responseHandler(data, res, options) {
-    return data
-  }
-
   pushData(data = []) {
     data.forEach((entity) => {
       const target = this.getTarget(this.$primaryKey, entity[this.$primaryKey])
@@ -203,8 +215,8 @@ class ListModel {
     return this
   }
 
-  reflashData(data) {
-    if (Array.isArray(data)) {
+  reflashData(data = []) {
+    if (Array.isArray(data) && data.length) {
       const cache = this.$cache
       data.forEach((entity) => {
         const target = cache.find(p => String(p[this.$primaryKey]) === String(entity[this.$primaryKey]))
@@ -223,6 +235,52 @@ class ListModel {
       this.value = data
     }
     return this
+  }
+
+  /**
+   * @param {RequestOptions} options
+   * @returns {Promise<Response>}
+   */
+  request(options = {}) {
+    return new Promise((resolve, reject) => {
+      apiRequest(this, options).then(resolve).catch(reject)
+    })
+  }
+
+  /**
+   * @param {*} data 
+   * @param {RequestOptions} options 
+   */
+  async requesHandler(data, options) {
+    return options.body || undefined
+  }
+
+  /**
+   * @param {Response} res 
+   * @param {RequestOptions} options 
+   */
+  async responseHandler(res, options) {
+    return res || {}
+  }
+
+  /**
+   * @param {RequestOptions} options 
+   * @param {Boolean} push 是否要使用非緩存模式
+   * @returns {Promise<Response>}
+   */
+  readList(options = {}, push = false) {
+    options.default = {
+      method: 'GET',
+    }
+    return this.request(options).then(res => {
+      const listModel = Array.isArray(res.data) ? { data: res.data } : res.data
+      this.set(listModel)
+      if (push) {
+        this.pushData(listModel.value)
+      } else {
+        this.reflashData(listModel.value)
+      }
+    })
   }
 }
 
